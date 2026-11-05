@@ -1,0 +1,12 @@
+{
+  "name": "guarani-descubra-seus-caminhos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jogo educativo de orientação profissional da Escola Guarani, sem coleta de dados.",
+  "scripts": {
+    "test": "node --test",
+    "dev": "python3 -m http.server 4173",
+    "check": "node --check src/app.js && node --check src/quiz-data.js && node --check src/scoring.js && node --test"
+  }
+}
