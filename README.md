@@ -4,7 +4,10 @@ Jogo/quiz educativo de orientação profissional para estudantes da Escola Guara
 
 ## O que está implementado
 
-- Página inicial com apresentação e instruções.
+- Experiência de aplicativo mobile em verde: início compacto, jornada, catálogo de áreas e mapa em telas próprias.
+- Estrutura de altura de tela (`100dvh`), cabeçalho e navegação inferior persistentes; apenas o conteúdo central rola. Em telas grandes, mantém a mesma interface de celular, limitada a 480 px.
+- Uma pergunta por tela com ações fixas. Pausar, explorar áreas e retomar preserva escolhas apenas enquanto a sessão está aberta.
+- Resultados separados em Destaques, Panorama e Próximos passos; reinício exige confirmação.
 - Sete etapas: interesses, habilidades, personalidade, valores, futuro, profissões e resultados.
 - 27 perguntas, com alternativas responsivas e navegação para revisar respostas.
 - Quatro perguntas educativas sobre profissões, com feedback explicativo.
@@ -14,6 +17,12 @@ Jogo/quiz educativo de orientação profissional para estudantes da Escola Guara
 - Aplicativo Web Progressivo (PWA) instalável pela tela inicial do Android/iPhone, com cache dos arquivos públicos para funcionar sem internet depois da primeira visita concluída.
 - **Nenhum cadastro, banco de dados, cookies, analytics ou envio de respostas.** As respostas só existem na memória da página enquanto ela está aberta. O cache offline guarda apenas os arquivos públicos do jogo, não as respostas.
 - Zero dependências de execução; não usa Agent/Build do Lovable.
+
+## Identidade e publicação
+
+A identidade desta versão é verde (#176342), com verde escuro e superfícies claras. Não reutiliza a paleta do ALP. Os ícones de instalação e o manifest seguem a mesma identidade. A referência do ALP foi usada somente para a organização da experiência em telas.
+
+O endereço publicado no Lovable é uma implantação separada: alterar este repositório não atualiza automaticamente aquele endereço. Esta versão é estática e pode ser servida via HTTPS, inclusive em subpastas, sem usar o editor ou créditos do Lovable.
 
 ## Usar em sala de aula no celular
 

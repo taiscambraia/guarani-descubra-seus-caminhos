@@ -2,273 +2,168 @@ import { AREAS, STAGES, QUESTIONS } from './quiz-data.js';
 import { calculateResults, getNextStep, getFutureNote } from './scoring.js';
 
 const app = document.querySelector('#app');
-const state = { screen: 'welcome', index: 0, selected: null, answers: {}, feedback: false, installHint: '' };
+const state = { screen: 'home', index: 0, selected: null, answers: {}, feedback: false, started: false, complete: false, area: null, resultTab: 'highlights', installHint: '' };
 let installPrompt = null;
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const paths = {
+  home: '<path d="m3 10 9-7 9 7v10H6V10m3 10v-7h6v7"/>',
+  journey: '<circle cx="12" cy="12" r="9"/><path d="m16 8-3 5-5 3 3-5Z"/>',
+  areas: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+  map: '<path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Zm6-2v16m6-14v16"/>',
+  arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
+  back: '<path d="m14 6-6 6 6 6"/>',
+  close: '<path d="m6 6 12 12M6 18 18 6"/>',
+  check: '<path d="m5 12 4 4L19 6"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/>',
+  download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>'
+};
+const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.journey}</svg>`;
+const button = (action, text, secondary = false) => `<button class="button ${secondary ? 'secondary' : 'primary'}" data-action="${action}">${text}</button>`;
+const title = (eyebrow, heading, description = '') => `<div class="screen-title"><span class="eyebrow">${eyebrow}</span><h1 tabindex="-1">${heading}</h1>${description ? `<p>${description}</p>` : ''}</div>`;
+const answered = () => Object.keys(state.answers).length;
+const stageFor = q => STAGES.find(s => s.id === q.stage);
 
-function esc(value) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-}
-
-function stageFor(question) {
-  return STAGES.find(stage => stage.id === question.stage);
-}
-
-function renderWelcome() {
-  return `
-    <section class="welcome-grid" aria-labelledby="welcome-heading">
-      <div class="welcome-content">
-        <span class="eyebrow"><span class="eyebrow-symbol">✦</span> SUA JORNADA COMEÇA AQUI</span>
-        <h1 id="welcome-heading" tabindex="-1">O futuro tem <span class="text-lime">muitos caminhos.</span><br/>Qual você quer explorar?</h1>
-        <p class="hero-lead">Seus interesses, seu jeito de pensar e suas ideias sobre o futuro podem abrir portas. Explore suas possibilidades em um jogo feito para descobrir mais sobre você.</p>
-        <div class="welcome-actions">
-          <button type="button" class="button button-primary button-large" data-action="start">Começar minha jornada <span aria-hidden="true">↗</span></button>
-          <span class="subtle-count">27 perguntas · 7 etapas · sem cadastro</span>
-        </div>
-        <div class="trust-strip"><span aria-hidden="true">✳</span> Sem respostas certas sobre seu perfil <span class="trust-divider">·</span> Suas respostas ficam apenas nesta tela</div>
-        <div class="install-card">
-          <div class="install-copy"><strong>📱 Use como aplicativo na escola</strong><span>Adicione à tela inicial e jogue mesmo sem internet após abrir o jogo uma vez.</span></div>
-          <button type="button" class="button button-secondary install-button" data-action="install">Adicionar ao celular</button>
-        </div>
-        ${state.installHint ? `<p class="install-hint" role="status" tabindex="-1">${esc(state.installHint)}</p>` : ''}
-      </div>
-      <div class="welcome-art" aria-label="Seis campos profissionais diferentes para explorar">
-        <div class="orbits" aria-hidden="true">
-          <div class="orbit orbit-a"></div><div class="orbit orbit-b"></div><div class="orbit orbit-c"></div>
-          <div class="center-orb"><span class="center-spark">✳</span><small>SEU<br/>FUTURO</small></div>
-          <span class="planet p-health">✚</span><span class="planet p-tech">⌘</span><span class="planet p-arts">✺</span><span class="planet p-learn">✦</span><span class="planet p-nature">✿</span><span class="planet p-business">↗</span>
-          <div class="floating-label floating-top"><strong>EXPLORE</strong><span>O que desperta você?</span></div>
-          <div class="floating-label floating-bottom"><strong>DESCUBRA</strong><span>O próximo passo é seu.</span></div>
-        </div>
-      </div>
-    </section>
-    <section class="how-it-works" aria-label="Como funciona o jogo">
-      <div class="how-title"><span class="eyebrow">UMA EXPERIÊNCIA EM 3 MOVIMENTOS</span><h2>Sem pressão. Com possibilidades.</h2></div>
-      <div class="how-grid">
-        <article class="how-card"><span class="how-icon">01</span><h3>Responda</h3><p>Descubra seus interesses, habilidades e o que importa para você.</p></article>
-        <article class="how-card"><span class="how-icon">02</span><h3>Explore</h3><p>Conheça áreas profissionais e aprenda com desafios rápidos.</p></article>
-        <article class="how-card"><span class="how-icon">03</span><h3>Encontre caminhos</h3><p>Veja seu mapa de interesses e ideias do que explorar depois.</p></article>
-      </div>
-      <p class="education-note">Este é um jogo educativo para reflexão. Não é um teste psicológico validado e não determina sua profissão.</p>
-    </section>`;
-}
-
-function renderStageRail(activeStageId) {
-  const currentIndex = STAGES.findIndex(stage => stage.id === activeStageId);
-  return `<div class="stage-rail" aria-label="Etapas da jornada">${STAGES.map((stage, index) => `
-    <div class="rail-item ${index === currentIndex ? 'is-current' : ''} ${index < currentIndex ? 'is-past' : ''}" ${index === currentIndex ? 'aria-current="step"' : ''}>
-      <span class="rail-dot">${index < currentIndex ? '✓' : index + 1}</span>
-      <span class="rail-name">${esc(stage.title)}</span>
-    </div>`).join('')}</div>`;
-}
-
-function renderOptions(question) {
-  return `<div class="answer-grid" role="group" aria-label="Escolha uma alternativa">${question.options.map((option, index) => {
-    const selected = state.selected === option.id;
-    const correct = question.kind === 'knowledge' && state.feedback && option.id === question.correct;
-    const wrong = question.kind === 'knowledge' && state.feedback && selected && !correct;
-    const disabled = question.kind === 'knowledge' && state.feedback;
-    return `<button type="button" class="answer-card ${selected ? 'selected' : ''} ${correct ? 'correct' : ''} ${wrong ? 'wrong' : ''}" data-choice="${esc(option.id)}" aria-pressed="${selected ? 'true' : 'false'}" ${disabled ? 'disabled' : ''}>
-        <span class="answer-key" aria-hidden="true">${String.fromCharCode(65 + index)}</span>
-        <span class="answer-copy"><strong>${esc(option.label)}</strong>${option.detail ? `<span>${esc(option.detail)}</span>` : ''}</span>
-        <span class="answer-indicator" aria-hidden="true">${correct ? '✓' : wrong ? '×' : selected ? '✓' : '○'}</span>
-      </button>`;
-  }).join('')}</div>`;
-}
-
-function renderQuestion() {
-  const question = QUESTIONS[state.index];
-  const stage = stageFor(question);
-  const stageIndex = STAGES.findIndex(s => s.id === question.stage);
-  const stageQuestions = QUESTIONS.filter(q => q.stage === question.stage);
-  const insideIndex = stageQuestions.findIndex(q => q.id === question.id) + 1;
-  const progressPercent = Math.round((state.index / QUESTIONS.length) * 100);
-  const feedback = question.kind === 'knowledge' && state.feedback;
-  const isCorrect = feedback && state.selected === question.correct;
-
-  return `
-    <section class="game-container" aria-labelledby="question-heading">
-      <div class="game-topline">
-        <span class="eyebrow"><span class="eyebrow-symbol">✦</span> SUA JORNADA</span>
-        <span class="counter">PERGUNTA <strong>${state.index + 1}</strong> DE ${QUESTIONS.length}</span>
-      </div>
-      <div class="progress-track" role="progressbar" aria-label="Progresso geral da jornada" aria-valuenow="${progressPercent}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progressPercent}%"></span></div>
-      ${renderStageRail(stage.id)}
-      <div class="question-layout">
-        <div class="stage-summary">
-          <div class="stage-summary-icon" aria-hidden="true">${stage.icon}</div>
-          <span class="eyebrow">ETAPA ${String(stageIndex + 1).padStart(2, '0')}</span>
-          <h2>${esc(stage.title)}</h2>
-          <p>${esc(stage.intro)}</p>
-          <div class="stage-progress"><span>${insideIndex} de ${stageQuestions.length} nesta etapa</span><div><span style="width:${Math.round(100 * (insideIndex - 1) / stageQuestions.length)}%"></span></div></div>
-        </div>
-        <div class="question-card">
-          <div class="question-heading-row"><span class="question-tag">${question.kind === 'knowledge' ? 'DESAFIO DE CONHECIMENTO' : question.kind === 'reflection' ? 'REFLEXÃO SOBRE O FUTURO' : 'SUA ESCOLHA'}</span><span class="question-numeral">${String(state.index + 1).padStart(2, '0')}</span></div>
-          <h1 id="question-heading" tabindex="-1">${esc(question.title)}</h1>
-          ${question.help ? `<p class="question-hint">${esc(question.help)}</p>` : ''}
-          ${renderOptions(question)}
-          ${feedback ? `<div class="knowledge-feedback ${isCorrect ? 'is-correct' : 'is-learning'}" role="status" tabindex="-1"><strong>${isCorrect ? 'Boa! Você acertou.' : 'Boa tentativa! Aprender faz parte.'}</strong><p>${esc(question.explanation)}</p></div>` : ''}
-          <div class="question-actions">
-            <button type="button" class="button button-quiet" data-action="back">${state.index === 0 ? 'Voltar ao início' : '← Anterior'}</button>
-            <button type="button" class="button button-primary" data-action="next" ${!state.selected ? 'disabled' : ''}>${question.kind === 'knowledge' && !feedback ? 'Conferir resposta' : state.index === QUESTIONS.length - 1 ? 'Ver meu mapa ↗' : 'Continuar →'}</button>
-          </div>
-        </div>
-      </div>
-      <div class="below-question">Não existe resposta errada sobre quem você é. E tudo bem mudar de ideia.</div>
-    </section>`;
-}
-
-function renderResults() {
-  const result = calculateResults(state.answers);
-  const [first, second] = result.ranking;
-  const areaRows = result.ranking.map((area, i) => `
-    <div class="area-row">
-      <div class="area-heading"><span class="area-title"><span aria-hidden="true">${area.emoji}</span> ${esc(area.title)}</span><span class="area-value">${area.percent}%</span></div>
-      <div class="area-bar" role="meter" aria-label="${esc(area.title)}: ${area.percent} por cento dos pontos possíveis" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${area.percent}"><span style="width:${area.percent}%;background:${area.color}"></span></div>
-    </div>`).join('');
-  const highlight = (area, title, extraClass) => `<article class="featured-area ${extraClass}">
-    <div class="featured-label">${title}</div>
-    <span class="featured-emoji" aria-hidden="true">${area.emoji}</span>
-    <h3>${esc(area.title)}</h3><p>${esc(area.description)}</p>
-    <div class="career-list" aria-label="Exemplos de profissões">${area.careers.map(c => `<span>${esc(c)}</span>`).join('')}</div>
-  </article>`;
-
-  return `<section class="results-container" aria-labelledby="results-heading">
-    <div class="result-hero">
-      <div><span class="eyebrow"><span class="eyebrow-symbol">✦</span> JORNADA CONCLUÍDA</span><h1 id="results-heading" tabindex="-1">Seu futuro não cabe <span class="text-lime">em uma única resposta.</span></h1><p>Este é o seu mapa de interesses de hoje. Use-o como ponto de partida para conhecer novas possibilidades — não como um rótulo.</p></div>
-      <div class="result-burst" aria-hidden="true"><span>✳</span><small>SEU<br/>MAPA</small></div>
+function home() {
+  return `<section class="home-screen">
+    <div class="home-greeting"><span class="eyebrow">SEU FUTURO, DO SEU JEITO</span><span class="tiny-tag">27 escolhas</span></div>
+    <div class="discovery-card">
+      <div class="compass-art" aria-hidden="true"><span class="orbit"></span><span class="compass">${icon('journey')}</span><span class="spark spark-one">✦</span><span class="spark spark-two">✦</span><span class="path-dot"></span></div>
+      <span class="eyebrow">DESCUBRA SEUS CAMINHOS</span>
+      <h1 tabindex="-1">O próximo passo<br>começa em você.</h1>
+      <p>Explore seus interesses e descubra possibilidades para o seu futuro.</p>
+      <div class="home-stats"><span><strong>7</strong> etapas</span><span><strong>27</strong> perguntas</span><span><strong>6</strong> áreas</span></div>
+      ${button(state.complete ? 'map' : 'start', `${state.complete ? 'Ver meu mapa' : state.started ? 'Continuar jornada' : 'Começar minha jornada'} ${icon('arrow')}`)}
     </div>
-    <div class="result-intro"><span class="result-spark">✦</span><div><strong>As áreas que mais apareceram nas suas escolhas</strong><p>Essas são sugestões exploratórias, não uma previsão da profissão ideal.</p></div></div>
-    <div class="features-grid">
-      ${highlight(first, '01 · ÁREA EM DESTAQUE', 'feature-primary')}
-      ${highlight(second, '02 · OUTRA ÁREA PARA EXPLORAR', 'feature-secondary')}
-    </div>
-    <div class="details-grid">
-      <section class="data-card" aria-labelledby="ranking-heading">
-        <div class="card-heading"><div><span class="eyebrow">PANORAMA</span><h2 id="ranking-heading">Todas as suas áreas</h2></div><span class="heading-icon" aria-hidden="true">◫</span></div>
-        <div class="areas-list">${areaRows}</div>
-        <p class="metric-explain">Cada percentual é a proporção de pontos recebidos em relação ao máximo possível naquela área, considerando as ${result.answeredProfile} respostas de perfil. Não representa probabilidade, aptidão medida nem chance de sucesso.</p>
-      </section>
-      <section class="data-card steps-card" aria-labelledby="next-heading">
-        <div class="card-heading"><div><span class="eyebrow">PRÓXIMO CAPÍTULO</span><h2 id="next-heading">O que fazer com isso?</h2></div><span class="heading-icon" aria-hidden="true">↗</span></div>
-        <p class="next-step-feature">${esc(getNextStep(state.answers))}</p>
-        <ul class="steps-list">${first.experiments.slice(0,2).map(step => `<li><span aria-hidden="true">✓</span>${esc(step)}</li>`).join('')}</ul>
-        <p class="future-note">${esc(getFutureNote(state.answers))}</p>
-      </section>
-    </div>
-    <div class="closing-grid">
-      <div class="knowledge-summary"><span class="knowledge-icon" aria-hidden="true">💡</span><div><strong>Você também explorou o mundo das profissões</strong><p>Acertou ${result.knowledgeCorrect} de ${result.knowledgeAnswered} desafios. Eles servem para aprender e não alteraram seu mapa de interesses.</p></div></div>
-      <div class="result-actions"><button type="button" class="button button-secondary" data-action="print">Imprimir meu mapa ↗</button><button type="button" class="button button-primary" data-action="restart">Refazer jornada ↻</button></div>
-    </div>
-    <p class="education-note result-disclaimer">Este jogo não substitui conversas com educadores e profissionais de orientação profissional. Interesses mudam, contextos importam e existem muitos caminhos de formação e trabalho.</p>
+    <button class="list-link" data-action="areas"><span class="tile-icon">${icon('areas')}</span><span><strong>Que caminhos existem?</strong><small>Conheça as seis áreas profissionais</small></span>${icon('arrow')}</button>
+    <p class="privacy-note">Sem cadastro. Suas escolhas ficam só nesta sessão.<br>Este jogo não determina sua profissão.</p>
   </section>`;
 }
-
-function render({ focusHeading = false, focusChoice = false, focusFeedback = false } = {}) {
-  document.documentElement.dataset.screen = state.screen;
-  app.innerHTML = state.screen === 'welcome' ? renderWelcome() : state.screen === 'results' ? renderResults() : renderQuestion();
-  if (focusFeedback) app.querySelector('.knowledge-feedback')?.focus({ preventScroll: true });
-  else if (focusChoice) app.querySelector('.answer-card.selected')?.focus({ preventScroll: true });
-  else if (focusHeading) app.querySelector('h1')?.focus({ preventScroll: true });
+function journey() {
+  return `<section>${title('UM PASSO DE CADA VEZ', 'Sua jornada', 'Conheça o caminho. Você pode sair das perguntas e continuar enquanto o app estiver aberto.')}
+    <div class="progress-card"><div><strong>${answered()} de 27</strong><span> escolhas concluídas</span></div><progress max="27" value="${answered()}" aria-label="Perguntas concluídas"></progress></div>
+    <ol class="stage-list">${STAGES.map((stage, i) => {
+      const qs = QUESTIONS.filter(q => q.stage === stage.id);
+      const done = stage.id === 'resultado' ? state.complete : qs.every(q => state.answers[q.id]);
+      const current = !state.complete && (state.started ? QUESTIONS[state.index].stage === stage.id : i === 0);
+      return `<li class="${done ? 'done' : current ? 'current' : ''}"><span class="stage-number">${done ? icon('check') : String(i + 1).padStart(2, '0')}</span><div><strong>${esc(stage.title)}</strong><small>${esc(stage.small)}</small></div>${current ? '<span class="current-label">Agora</span>' : ''}</li>`;
+    }).join('')}</ol>
+    ${button(state.complete ? 'map' : 'start', state.complete ? 'Explorar meu mapa' : state.started ? 'Continuar de onde parei' : 'Começar jornada')}
+  </section>`;
 }
-
-function start() {
-  state.screen = 'question';
-  state.index = 0;
-  state.selected = null;
-  state.answers = {};
-  state.feedback = false;
-  render({ focusHeading: true });
-  window.scrollTo({ top: 0, behavior: 'instant' });
+function areas() {
+  if (state.area) {
+    const a = AREAS.find(x => x.id === state.area);
+    return `<section><button class="text-button" data-action="areas">${icon('back')} Todas as áreas</button><div class="area-detail-icon" aria-hidden="true">${a.emoji}</div>${title('UM CAMINHO PARA EXPLORAR', esc(a.title), esc(a.description))}<h2>Profissões para conhecer</h2><div class="career-list">${a.careers.map(c => `<span>${esc(c)}</span>`).join('')}</div><h2>Experimente na prática</h2><ul class="experiment-list">${a.experiments.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="info-note">São exemplos, não limites. Uma mesma profissão pode combinar interesses de várias áreas.</p></section>`;
+  }
+  return `<section>${title('EXPLORE POSSIBILIDADES', 'Um mundo de caminhos', 'Não precisa escolher agora. Toque em uma área para conhecer profissões e ideias para experimentar.')}
+    <div class="area-catalog">${AREAS.map(a => `<button class="area-tile" data-area="${a.id}"><span class="area-emoji" aria-hidden="true">${a.emoji}</span><strong>${esc(a.title)}</strong><span>${esc(a.short)}</span><small>Explorar ${icon('arrow')}</small></button>`).join('')}</div></section>`;
 }
-
-function back() {
-  if (state.feedback) {
-    state.feedback = false;
-    render({ focusHeading: true });
-    return;
-  }
-  if (state.index === 0) {
-    state.screen = 'welcome';
-    render({ focusHeading: true });
-    return;
-  }
-  state.index -= 1;
+function question() {
+  const q = QUESTIONS[state.index];
+  const stage = stageFor(q);
+  const stageIndex = STAGES.indexOf(stage) + 1;
+  return `<section class="question-screen" aria-labelledby="question-title"><div class="question-progress"><span>ETAPA ${stageIndex} DE 7 · ${esc(stage.title)}</span><strong>${state.index + 1}<span> / 27</span></strong></div>
+    <progress max="27" value="${state.index}" aria-label="Progresso da jornada"></progress>
+    <div class="question-body"><span class="question-type">${q.kind === 'knowledge' ? 'DESAFIO DE CONHECIMENTO' : q.kind === 'reflection' ? 'OLHANDO PARA O FUTURO' : 'O QUE COMBINA COM VOCÊ?'}</span><h1 id="question-title" tabindex="-1">${esc(q.title)}</h1><p class="question-help">${esc(q.help || stage.intro)}</p>
+    <div class="answer-list" role="group" aria-label="Escolha uma alternativa">${q.options.map((o, i) => {
+      const selected = state.selected === o.id;
+      const correct = state.feedback && o.id === q.correct;
+      const wrong = state.feedback && selected && !correct;
+      return `<button class="answer ${selected ? 'selected' : ''} ${correct ? 'correct' : ''} ${wrong ? 'wrong' : ''}" data-choice="${esc(o.id)}" aria-pressed="${selected}" ${state.feedback ? 'disabled' : ''}><span class="answer-letter">${correct ? '✓' : wrong ? '×' : String.fromCharCode(65 + i)}</span><span><strong>${esc(o.label)}</strong>${o.detail ? `<small>${esc(o.detail)}</small>` : ''}</span><span class="answer-radio" aria-hidden="true">${selected ? icon('check') : ''}</span></button>`;
+    }).join('')}</div>
+    ${state.feedback ? `<div class="feedback" role="status" tabindex="-1"><strong>${state.selected === q.correct ? 'Boa! Você acertou.' : 'Aprender faz parte do caminho.'}</strong><p>${esc(q.explanation)}</p></div>` : ''}</div></section>`;
+}
+function map() {
+  if (!state.complete) return `<section class="empty-map"><div class="empty-map-art">${icon('map')}</div>${title('SUAS DESCOBERTAS', 'Seu mapa está a caminho', 'Conclua a jornada para descobrir as áreas que mais aparecem nas suas escolhas.')}${state.started ? `<p class="info-note">Você já concluiu ${answered()} de 27 escolhas.</p>` : ''}${button('start', state.started ? 'Continuar minha jornada' : 'Começar minha jornada')}<p class="privacy-note">Se fechar ou recarregar o app, as respostas serão apagadas.</p></section>`;
+  const result = calculateResults(state.answers);
+  const tabs = [['highlights', 'Destaques'], ['ranking', 'Panorama'], ['next', 'Próximos passos']];
+  let content;
+  if (state.resultTab === 'highlights') content = `<p class="map-intro">Os caminhos que mais apareceram nas suas escolhas de hoje.</p>${result.ranking.slice(0, 2).map((a, i) => `<button class="result-area" data-area="${a.id}"><span class="result-label">0${i + 1} · ${i ? 'TAMBÉM PARA EXPLORAR' : 'SEU PRIMEIRO DESTAQUE'}</span><span class="result-emoji" aria-hidden="true">${a.emoji}</span><h2>${esc(a.title)}</h2><p>${esc(a.short)}</p><span class="text-link">Conhecer esse caminho ${icon('arrow')}</span></button>`).join('')}`;
+  else if (state.resultTab === 'ranking') content = `<div class="ranking">${result.ranking.map(a => `<div class="ranking-row"><div><strong>${a.emoji} ${esc(a.title)}</strong><span>${a.percent}%</span></div><meter min="0" max="100" value="${a.percent}" aria-label="${esc(a.title)}"></meter></div>`).join('')}</div><p class="info-note">Proporção dos pontos possíveis em cada área, considerando ${result.answeredProfile} respostas de perfil. Não representa probabilidade, aptidão medida ou chance de sucesso.</p>`;
+  else content = `<div class="next-card"><span class="eyebrow">SEU PRÓXIMO PASSO</span><h2>Da descoberta à experiência</h2><p>${esc(getNextStep(state.answers))}</p></div><ul class="experiment-list">${result.ranking[0].experiments.slice(0, 2).map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="info-note">${esc(getFutureNote(state.answers))}</p><p class="info-note">Você acertou ${result.knowledgeCorrect} de ${result.knowledgeAnswered} desafios sobre profissões. Eles não alteram seu mapa de interesses.</p>${button('print', 'Imprimir meu mapa', true)}${button('restart-confirm', 'Refazer a jornada', true)}`;
+  return `<section>${title('JORNADA CONCLUÍDA', 'Seu mapa de interesses')}<div class="segments" role="group" aria-label="Seções do mapa">${tabs.map(([id, label]) => `<button data-result-tab="${id}" aria-pressed="${state.resultTab === id}">${label}</button>`).join('')}</div>${content}<p class="privacy-note">Um ponto de partida, não um rótulo. Interesses mudam.<br>Este jogo não é um teste psicológico validado.</p></section>`;
+}
+function info() {
+  return `<section>${title('NO SEU CELULAR', 'Leve seus caminhos com você', 'Adicione o Guarani à tela inicial para abrir como aplicativo.')}${button('install', `${icon('download')} Adicionar à tela inicial`)}<p class="info-note" role="status">${esc(state.installHint || 'No iPhone: Compartilhar → Adicionar à Tela de Início. No Android: menu do navegador → Instalar app ou Adicionar à tela inicial.')}</p><h2>Sem internet?</h2><p>Depois de carregar o jogo com internet e concluir o preparo offline, você pode abrir o aplicativo sem conexão.</p><p class="offline-state" role="status">${esc(offlineStatus)}</p><h2>Suas respostas são suas</h2><p>Sem cadastro e sem envio de respostas. Elas existem apenas nesta sessão e desaparecem ao fechar ou recarregar o app.</p><p class="info-note">Atividade educativa para explorar interesses. Não é um teste psicológico validado e não determina uma profissão.</p></section>`;
+}
+let offlineStatus = 'Preparando arquivos para uso offline…';
+function render({ focus = false, keepScroll = false, choice = false, feedback = false } = {}) {
+  const scroll = app.querySelector('.screen-content')?.scrollTop || 0;
+  const isQuestion = state.screen === 'question';
+  const navScreen = state.screen === 'area' ? 'areas' : state.screen;
+  const labels = { home: 'Descubra seus caminhos', journey: 'Sua jornada', areas: 'Explore as áreas', area: 'Explore as áreas', map: 'Meu mapa', info: 'Sobre o aplicativo' };
+  const content = isQuestion ? question() : state.screen === 'journey' ? journey() : ['areas', 'area'].includes(state.screen) ? areas() : state.screen === 'map' ? map() : state.screen === 'info' ? info() : home();
+  app.innerHTML = `<div class="app-shell"><header class="app-header">${isQuestion ? `<button class="icon-button" data-action="pause" aria-label="Pausar e ver a jornada">${icon('close')}</button><div class="header-title"><strong>Sua jornada</strong><small>Uma escolha de cada vez</small></div>` : `<span class="brand-mark" aria-hidden="true">G<span>↗</span></span><div class="header-title"><strong>ESCOLA GUARANI</strong><small>${labels[state.screen]}</small></div><button class="icon-button" data-action="info" aria-label="Sobre e instalar aplicativo">${icon('info')}</button>`}</header><main id="conteudo" class="screen-content" tabindex="-1">${content}</main>${isQuestion ? `<footer class="question-controls"><button class="button secondary" data-action="back" aria-label="${state.index ? 'Pergunta anterior' : 'Voltar à jornada'}">${icon('back')} Voltar</button><button class="button primary" data-action="next" ${!state.selected ? 'disabled' : ''}>${QUESTIONS[state.index].kind === 'knowledge' && !state.feedback ? 'Conferir' : state.index === QUESTIONS.length - 1 ? 'Ver meu mapa' : 'Continuar'} ${icon('arrow')}</button></footer>` : `<nav class="tab-bar" aria-label="Navegação principal">${[['home', 'Início'], ['journey', 'Jornada'], ['areas', 'Áreas'], ['map', 'Meu mapa']].map(([id, label]) => `<button data-action="${id}" ${navScreen === id ? 'aria-current="page"' : ''}>${icon(id)}<span>${label}</span></button>`).join('')}</nav>`}</div>`;
+  if (keepScroll) app.querySelector('.screen-content').scrollTop = scroll;
+  if (feedback) app.querySelector('.feedback')?.focus({ preventScroll: true });
+  else if (choice) app.querySelector('.answer.selected')?.focus({ preventScroll: true });
+  else if (focus) app.querySelector('h1')?.focus({ preventScroll: true });
+}
+function go(screen) { state.screen = screen; if (screen === 'areas') state.area = null; render({ focus: true }); }
+function start() { state.started = true; go('question'); }
+function next() {
+  const q = QUESTIONS[state.index];
+  if (!q.options.some(o => o.id === state.selected)) return;
+  if (q.kind === 'knowledge' && !state.feedback) { state.feedback = true; render({ feedback: true, keepScroll: true }); app.querySelector('.feedback')?.scrollIntoView({ block: 'nearest' }); return; }
+  state.answers[q.id] = state.selected;
+  if (state.index === QUESTIONS.length - 1) { state.complete = true; state.resultTab = 'highlights'; go('map'); return; }
+  state.index++;
   state.selected = state.answers[QUESTIONS[state.index].id] ?? null;
   state.feedback = false;
-  render({ focusHeading: true });
+  render({ focus: true });
 }
-
-function next() {
-  const question = QUESTIONS[state.index];
-  if (!question || !question.options.some(option => option.id === state.selected)) return;
-  if (question.kind === 'knowledge' && !state.feedback) {
-    state.feedback = true;
-    render({ focusFeedback: true });
-    return;
-  }
-  state.answers[question.id] = state.selected;
-  if (state.index === QUESTIONS.length - 1) {
-    state.screen = 'results';
-  } else {
-    state.index += 1;
-    state.selected = state.answers[QUESTIONS[state.index].id] ?? null;
-    state.feedback = false;
-  }
-  render({ focusHeading: true });
-  window.scrollTo({ top: 0, behavior: 'instant' });
+function back() {
+  if (state.feedback) state.feedback = false;
+  else if (!state.index) { go('journey'); return; }
+  else { state.index--; state.selected = state.answers[QUESTIONS[state.index].id] ?? null; }
+  render({ focus: true });
 }
-
-app.addEventListener('click', event => {
-  const control = event.target.closest('button');
+app.addEventListener('click', e => {
+  const control = e.target.closest('button');
   if (!control || !app.contains(control)) return;
-  const action = control.dataset.action;
-  if (action === 'start' || action === 'restart') return start();
-  if (action === 'back') return back();
-  if (action === 'next') return next();
-  if (action === 'print') return window.print();
-  if (action === 'install') return installOnPhone();
   if (control.dataset.choice) {
-    const question = QUESTIONS[state.index];
     if (state.screen !== 'question' || state.feedback) return;
-    if (!question.options.some(option => option.id === control.dataset.choice)) return;
     state.selected = control.dataset.choice;
-    render({ focusChoice: true });
+    render({ keepScroll: true, choice: true }); return;
+  }
+  if (control.dataset.area) { state.area = control.dataset.area; go('area'); return; }
+  if (control.dataset.resultTab) { state.resultTab = control.dataset.resultTab; render(); return; }
+  const action = control.dataset.action;
+  if (['home', 'journey', 'areas', 'map', 'info'].includes(action)) return go(action);
+  if (action === 'start') return start();
+  if (action === 'pause') return go('journey');
+  if (action === 'next') return next();
+  if (action === 'back') return back();
+  if (action === 'install') return install();
+  if (action === 'print') return printMap();
+  if (action === 'restart-confirm') {
+    const dialog = document.querySelector('#restart-dialog'); dialog.showModal(); return;
   }
 });
-
-render();
-
-// Instalação opcional: o jogo também funciona diretamente no navegador.
-window.addEventListener('beforeinstallprompt', event => {
-  event.preventDefault();
-  installPrompt = event;
+document.querySelector('#restart-dialog').addEventListener('close', e => {
+  if (e.target.returnValue !== 'restart') return;
+  Object.assign(state, { screen: 'question', index: 0, selected: null, answers: {}, feedback: false, started: true, complete: false });
+  render({ focus: true });
 });
-
-async function installOnPhone() {
-  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
-    state.installHint = 'O jogo já está aberto como aplicativo neste celular.';
-  } else if (installPrompt) {
-    const prompt = installPrompt;
-    installPrompt = null;
-    try {
-      await prompt.prompt();
-      const choice = await prompt.userChoice;
-      state.installHint = choice.outcome === 'accepted'
-        ? 'Instalação solicitada. Procure o ícone do jogo na sua tela inicial.'
-        : 'Você também pode instalar pelo menu do navegador, quando quiser.';
-    } catch {
-      state.installHint = 'Abra o menu do navegador e escolha “Adicionar à tela inicial” ou “Instalar app”.';
-    }
-  } else {
-    state.installHint = 'No iPhone: toque em Compartilhar e depois em “Adicionar à Tela de Início”. No Android: abra o menu ⋮ e escolha “Adicionar à tela inicial” ou “Instalar app”.';
-  }
+function printMap() {
+  const r = calculateResults(state.answers);
+  document.querySelector('#print-map').innerHTML = `<h1>Seu mapa de interesses — Escola Guarani</h1><p>Um ponto de partida para explorar, não um diagnóstico.</p>${r.ranking.map(a => `<h2>${esc(a.title)} · ${a.percent}%</h2><p>${esc(a.description)}</p><p>${a.careers.map(esc).join(' · ')}</p>`).join('')}<h2>Próximos passos</h2><p>${esc(getNextStep(state.answers))}</p><p>${esc(getFutureNote(state.answers))}</p>`;
+  window.print();
+}
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; });
+async function install() {
+  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) state.installHint = 'Você já está usando o aplicativo instalado.';
+  else if (installPrompt) {
+    const prompt = installPrompt; installPrompt = null;
+    try { await prompt.prompt(); const choice = await prompt.userChoice; state.installHint = choice.outcome === 'accepted' ? 'Instalação solicitada. Procure o ícone na tela inicial.' : 'Você pode instalar depois pelo menu do navegador.'; }
+    catch { state.installHint = 'Use o menu do navegador para adicionar à tela inicial.'; }
+  } else state.installHint = 'No iPhone: Compartilhar → Adicionar à Tela de Início. No Android: menu ⋮ → Instalar app ou Adicionar à tela inicial. A opção depende do navegador e exige HTTPS.';
   render();
-  app.querySelector('.install-hint')?.focus({ preventScroll: true });
 }
-
 if ('serviceWorker' in navigator && window.isSecureContext) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js', { scope: './' })
-      .catch(() => { /* Em visualização local sem HTTPS, o jogo continua disponível on-line. */ });
-  });
-}
+  navigator.serviceWorker.register('./service-worker.js', { scope: './' }).then(() => navigator.serviceWorker.ready).then(() => {
+    offlineStatus = 'Pronto para abrir sem internet neste navegador.';
+    if (state.screen === 'info') render();
+  }).catch(() => { offlineStatus = 'Preparo offline indisponível. Conecte-se à internet e tente abrir novamente.'; if (state.screen === 'info') render(); });
+} else offlineStatus = 'Para instalar e preparar o modo offline, abra o jogo por HTTPS ou localhost.';
+render();

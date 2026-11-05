@@ -1,5 +1,5 @@
 /* O cache guarda apenas arquivos públicos do jogo, nunca respostas dos alunos. */
-const VERSION = 'guarani-caminhos-v1';
+const VERSION = 'guarani-caminhos-mobile-v2';
 const STATIC_FILES = [
   './', './index.html', './styles.css', './favicon.svg',
   './manifest.webmanifest', './icons/icon-180.png',
@@ -31,6 +31,6 @@ self.addEventListener('fetch', event => {
     const cached = await caches.match(request, { ignoreSearch: true });
     if (cached) return cached;
     try { return await fetch(request); }
-    catch { return caches.match('./index.html') || Response.error(); }
+    catch { return (await caches.match('./index.html')) || Response.error(); }
   })());
 });
